@@ -31,12 +31,47 @@
   </button>
   </a>
 
+    <!-- Import Excel button (right side, near form card) -->
+  <button type="button" onclick="openExcelModal()"
+    class="absolute top-[5.5rem] right-[33%] bg-[#141E61] text-white px-6 py-2 rounded-md hover:bg-[#0F044C] transition duration-300">
+    Import Excel
+  </button>
+
   <!-- Heading and subtext centered -->
   <div class="text-center">
     <h1 class="text-3xl font-bold text-[#0F044C]">Step 2: Subject Details</h1>
     <p class="text-[#141E61] mt-2">Configure your subject preferences below</p>
   </div>
 </div>
+
+<!-- Excel Import Modal -->
+<div id="excelModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+  <div class="bg-white rounded-lg shadow-lg w-full max-w-lg p-6 relative">
+    <h2 class="text-xl font-semibold text-[#0F044C] mb-4">Import Subjects from Excel</h2>
+    <p class="mb-3 text-gray-700">Please make sure your Excel file follows the given format.</p>
+
+    <!-- Sample Image -->
+    <img src="/images/image.png" alt="Sample Excel Format" class="border rounded mb-4">
+
+    <!-- Upload Form -->
+    <form id="excelUploadForm" action="/step2/import" method="POST" enctype="multipart/form-data">
+      <input type="file" name="excelFile" accept=".xlsx,.xls"
+             class="mb-3 w-full border border-gray-400 rounded px-3 py-2" required>
+            <p class="mb-3 text-gray-700">After uploading, you can check the table to see that the subjects have been added.</p>
+      <button type="submit"
+              class="bg-[#141E61] text-white px-4 py-2 rounded hover:bg-[#787A91] transition">
+        Upload
+      </button>
+    </form>
+
+    <!-- Close Button -->
+    <div class="mt-4 text-right">
+      <button onclick="closeExcelModal()"
+        class="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">OK</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- Form Card -->
 <div class="max-w-xl mx-auto bg-[#EEEEEE] shadow-lg rounded-lg p-8">
@@ -97,7 +132,6 @@
     </button>
   </form>
 </div>
-
 
 <!-- Subject List Table -->
 <div id="subjectListContainer" class="max-w-4xl mx-auto mt-8"><!-- Increased max width for spacing -->
@@ -225,7 +259,6 @@
   }
 }
 
-
   function openEditSubjectModal(button) {
     const modal = document.getElementById('editSubjectModal');
     const form = document.getElementById('editSubjectForm');
@@ -267,5 +300,12 @@
   function closeEditSubjectModal() {
     document.getElementById('editSubjectModal').classList.add('hidden');
   }  
+
+    function openExcelModal() {
+    document.getElementById('excelModal').classList.remove('hidden');
+  }
+  function closeExcelModal() {
+    document.getElementById('excelModal').classList.add('hidden');
+  }
 
 </script>

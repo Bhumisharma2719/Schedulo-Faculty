@@ -22,10 +22,12 @@
     "method-override": "^3.0.0",
     "moment": "^2.30.1",
     "mongoose": "^8.13.2",
+    "multer": "^2.0.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "pdfkit": "^0.17.1",
-    "puppeteer": "^24.7.2"
+    "puppeteer": "^24.7.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"

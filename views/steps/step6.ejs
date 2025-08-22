@@ -1,4 +1,4 @@
-<%- include('../partials/header') %>
+<%- include('../partials/header') %> 
 
 <!DOCTYPE html>
 <html lang="en">
@@ -6,6 +6,25 @@
   <meta charset="UTF-8">
   <title>Step 6 - Timetable Generator</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .drag-over { outline: 2px dashed #CBDCEB; }
+    .highlight-conflict { background-color: #ef4444 !important; color:#fff !important; }
+    .ghost-cell { opacity: 0.4; }
+    /* Add this CSS anywhere in your page or main CSS file */
+    .highlight-red {
+    background-color: #ffb3b3 !important;
+    }
+    .highlight-orange {
+    background-color: #ffe0b3 !important;
+    }
+    /* Add in your CSS file */
+.lab-cell {
+  background: #CBDCEB !important;
+  color: black !important;
+  text-align: center;
+  vertical-align: middle;
+}
+  </style>
 </head>
 <% if (saved) { %>
   <div class="text-green-700 text-center font-semibold mt-4">
@@ -76,7 +95,12 @@
 <% if (timetable && timetable.timetable) { %>
   <% Object.keys(timetable.timetable).forEach(course => { %>
     <div style="page-break-after: always;">
-      <table border="1" cellpadding="3" cellspacing="0" style="width:95%; margin: 0 auto 60px auto; font-size: 0.9em; text-align:center;">
+      <table
+        class="timetable-table"
+        data-course="<%= course %>"
+        data-main="<%= /b\.?tech\s*ce/i.test(course) ? '1' : '0' %>"
+        border="1" cellpadding="3" cellspacing="0"
+        style="width:95%; margin: 0 auto 60px auto; font-size: 0.9em; text-align:center;">
         <thead style="color: #ffffff;">
           <tr>
             <th colspan="<%= timetable.slots.length + 1 %>" style="font-size: 1.5em; text-align:center;"><%= university %></th>
@@ -102,18 +126,40 @@
                 <% if (skipNext) { skipNext = false; return; } %>
                 <% const isLab = cell.subject.includes('Lab-1') || cell.subject.includes('Lab-2'); %>
                 <% if (isLab) { %>
-                  <td colspan="2" style="background-color:#CBDCEB; text-align: center;">
+                  <td
+                    colspan="2"
+                    class="timetable-cell"
+                    style="background-color:#CBDCEB; text-align: center;"
+                    draggable="true"
+                    data-course="<%= course %>"
+                    data-day="<%= day %>"
+                    data-slot-index="<%= idx %>"
+                    data-colspan="2"
+                    data-subject="<%- cell.subject %>"
+                    data-teacher="<%- cell.teacher %>"
+                    data-room="<%- cell.room %>"
+                    data-is-lab="1">
                     <div><strong><%= cell.room %></strong></div>
                     <div><%= cell.subject.replace(' (Lab-1)', ' (G1)').replace(' (Lab-2)', ' (G2)') %></div>
                     <div><%= cell.teacher %></div>
                   </td>
                   <% skipNext = true; %>
                 <% } else if (timetable.slots[idx] === '1:00-1:30') { %>
-                  <td>
+                  <td class="timetable-break" data-slot-index="<%= idx %>">
                     Break
                   </td>
                 <% } else { %>
-                  <td>
+                  <td
+                    class="timetable-cell"
+                    draggable="true"
+                    data-course="<%= course %>"
+                    data-day="<%= day %>"
+                    data-slot-index="<%= idx %>"
+                    data-colspan="1"
+                    data-subject="<%- cell.subject %>"
+                    data-teacher="<%- cell.teacher %>"
+                    data-room="<%- cell.room %>"
+                    data-is-lab="<%= (cell.subject || '').toLowerCase().includes('lab') ? '1' : '0' %>">
                     <div><strong><%= cell.room %></strong></div>
                     <div><%= cell.subject %></div>
                     <div><%= cell.teacher %></div>
@@ -155,9 +201,18 @@
       </table>
     </div>
   <% }) %>
-
   
   <div style="text-align:center; margin-top:20px;">
+    <form id="updateForm" action="/step6/update" method="POST" onsubmit="updateTimetableInputs()">
+        <input type="hidden" name="university" value="<%= university %>">
+        <input type="hidden" name="faculty" value="<%= faculty %>">
+        <input type="hidden" name="date" value="<%= wefDate %>">
+        <input type="hidden" name="timetableData" id="updateTimetableData" value='<%- JSON.stringify(timetable) %>'>
+        <button type="submit"
+                class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-800 transition duration-300">
+          🔄 Update
+        </button>
+      </form>
   <form action="/step6/save" method="POST">
     <input type="hidden" name="university" value="<%= university %>">
     <input type="hidden" name="faculty" value="<%= faculty %>">
@@ -172,5 +227,7 @@
 
 <% } %>
 
+<!-- Attach external JS (make sure this file exists in /public/js) -->
+<script src="/js/step6-editor.js"></script>
 
 <%- include('../partials/footer') %>

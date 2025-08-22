@@ -21,6 +21,8 @@ const step3Routes = require('./routes/step3');
 const step4Routes = require('./routes/step4');
 const step5Routes = require('./routes/step5');
 const step6Routes = require('./routes/step6');
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Session setup (only once!)
 app.use(session({

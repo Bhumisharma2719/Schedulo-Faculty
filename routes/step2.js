@@ -2,6 +2,41 @@ const express = require('express');
 const router = express.Router();
 const Subject = require('../models/Subject');
 
+const multer = require('multer');
+const XLSX = require('xlsx');
+
+// Multer config - temp storage
+const upload = multer({ dest: 'uploads/' });
+
+router.post('/import', upload.single('excelFile'), async (req, res) => {
+  try {
+    const workbook = XLSX.readFile(req.file.path);
+    const sheetName = workbook.SheetNames[0];
+    const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    const department = req.session.departmentName || 'General';
+
+    const subjectsToInsert = sheetData.map(row => ({
+      fullName: row.fullName,
+      shortName: row.shortName,
+      count: row.count,
+      hoursPerLecture: row.hoursPerLecture,
+      isLab: String(row.isLab).toLowerCase() === 'yes' || String(row.isLab).toLowerCase() === 'true',
+      groupSystem: String(row.isLab).toLowerCase() === 'yes' || String(row.isLab).toLowerCase() === 'true',
+      labType: String(row.isLab).toLowerCase() === 'yes' || String(row.isLab).toLowerCase() === 'true' ? row.labType || '' : '',
+      department
+    }));
+
+    await Subject.insertMany(subjectsToInsert);
+
+    res.redirect('/step2');
+  } catch (error) {
+    console.error('Error importing Excel file:', error);
+    res.status(500).send('Error importing Excel file');
+  }
+});
+
+
 // Step 2: Get all subjects
 router.get('/', async (req, res) => {
   try {

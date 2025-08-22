@@ -92,6 +92,41 @@ router.get('/', async (req, res) => {
   });
 });
 
+router.post('/update', async (req, res) => {
+  const { university, faculty, date, timetableData } = req.body;
+
+  try {
+    const parsedTimetable = JSON.parse(timetableData);
+
+    const updated = await Timetable.findOneAndUpdate(
+      { university, faculty, effectiveFrom: date },
+      {
+        timetable: parsedTimetable.timetable,
+        days: parsedTimetable.days,
+        slots: parsedTimetable.slots,
+        subjectTeachers: parsedTimetable.subjectTeachers
+      },
+      { new: true, upsert: true }
+    );
+
+    res.render('steps/step6', {
+      timetable: {
+        timetable: updated.timetable,
+        days: updated.days,
+        slots: updated.slots,
+        subjectTeachers: updated.subjectTeachers
+      },
+      university,
+      faculty,
+      wefDate: date,
+      saved: false
+    });
+  } catch (err) {
+    console.error('Error updating timetable:', err);
+    res.status(500).send('Error updating timetable.');
+  }
+});
+
 router.get('/timetable', (req, res) => {
   res.render('user/timetable'); // no need to add .ejs
 });
