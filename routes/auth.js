@@ -4,7 +4,7 @@ const router = express.Router();
 
 // Login Page
 router.get('/login', (req, res) => {
-  res.render('login'); // views/auth/login.ejs
+  res.render('login'); // You should have views/auth/login.ejs
 });
 
 // Google OAuth Login
@@ -19,24 +19,13 @@ router.get('/google/callback',
     failureMessage: true
   }),
   (req, res) => {
-    const email = req.user.email;
-
-    // ✅ Admin check
-    if (req.user.isAdmin || email.endsWith('@svsu.ac.in')) {
-      return res.redirect('/step1');
+    if (req.user.isAdmin) {
+      return res.redirect('/step1');  // Admin panel
     }
-
-    // ✅ Temporarily allow gmail and others for testing
-    return res.redirect('/user/timetable');
-
-    // ❌ In final version, you can uncomment this to restrict access:
-    /*
-    req.logout(() => {
-      res.send('Access Denied: Only @svsu.ac.in users allowed.');
-    });
-    */
+    return res.redirect('/user/timetable'); // Normal user
   }
 );
+
 
 // Logout
 router.get('/logout', (req, res) => {

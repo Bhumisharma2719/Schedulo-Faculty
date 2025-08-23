@@ -5,17 +5,24 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('./models/User');
 
-passport.use(new GoogleStrategy({
+passport.use(new GoogleStrategy(
+  {
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.CALLBACK_URL
+    callbackURL: process.env.CALLBACK_URL,
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
       const email = profile.emails[0].value;
-      const domain = email.split('@')[1];
 
-      // ✅ Allow all domains for testing (including @gmail.com)
+      // ✅ Multiple admins check
+      const adminEmails = process.env.ADMIN_EMAILS
+        ? process.env.ADMIN_EMAILS.split(",").map(e => e.trim().toLowerCase())
+        : [];
+
+      const isAdmin = adminEmails.includes(email.toLowerCase());
+
+      // 🔓 Allow ANY email as user
       let user = await User.findOne({ googleId: profile.id });
 
       if (!user) {
@@ -23,9 +30,12 @@ passport.use(new GoogleStrategy({
           googleId: profile.id,
           displayName: profile.displayName || "No Name",
           email: email,
-          // Only mark isAdmin true for specific conditions
-          isAdmin: email === process.env.ADMIN_EMAIL || domain === 'svsu.ac.in'
+          isAdmin: isAdmin,
         });
+      } else {
+        // Update isAdmin flag if email is in admin list
+        user.isAdmin = isAdmin;
+        await user.save();
       }
 
       return done(null, user);

@@ -79,7 +79,17 @@ app.use('/step5', isLoggedIn, checkAdmin, step5Routes);
 app.use('/step6', isLoggedIn, checkAdmin, step6Routes);
 
 // Redirect root to step1
-app.get('/', (req, res) => res.redirect('/step1'));
+app.get('/', (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.redirect('/auth/login');
+  }
+
+  if (req.user && req.user.isAdmin) {
+    return res.redirect('/step1'); // admin
+  }
+
+  return res.redirect('/user/timetable'); // normal user
+});
 
 // 404 fallback for unknown routes
 app.use((req, res) => {
