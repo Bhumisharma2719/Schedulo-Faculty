@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Timetable = require('../models/Timetable');
 const Teacher = require('../models/Teacher');
+const TemporarySchedule = require('../models/TemporarySchedule');
+const ScheduleNotification = require('../models/ScheduleNotification');
 
 // Middleware: Ensure user is faculty with teacher assigned
 function isFacultyWithTeacher(req, res, next) {
@@ -34,6 +36,7 @@ router.get('/timetable', isFacultyWithTeacher, async (req, res) => {
     if (!latestTimetableDoc || !teacher) {
       return res.render('faculty/personal-timetable', {
         personalTimetable: {},
+        scheduledClasses: {},
         days: [],
         slots: [],
         teacherName: teacher?.name || 'Unknown',
@@ -81,38 +84,60 @@ router.get('/timetable', isFacultyWithTeacher, async (req, res) => {
       }
     });
 
+    // 🔹 GET SCHEDULED CLASSES FOR THIS TEACHER
+    const scheduledClasses = await TemporarySchedule.find({
+      teacherId: teacher._id,
+      status: 'scheduled'
+    });
+
+    // Format scheduled classes for frontend
+    const scheduledData = {};
+    scheduledClasses.forEach(sch => {
+      const key = `${sch.from.day}-${sch.from.slot}`;
+      scheduledData[key] = {
+        course: sch.course,
+        originalSlot: sch.from,
+        newSlot: sch.to,
+        room: sch.room,
+        building: sch.building,
+        date: sch.to.date,
+        id: sch._id
+      };
+    });
+
     // 🔹 Extract COURSE (STUDENT) timetable Library slots
-const courseTimetables = {};
+    const courseTimetables = {};
 
-Object.entries(fullTimetable).forEach(([courseName, courseData]) => {
-  const courseLibrary = {};
+    Object.entries(fullTimetable).forEach(([courseName, courseData]) => {
+      const courseLibrary = {};
 
-  Object.entries(courseData).forEach(([dayName, dayData]) => {
-    Object.entries(dayData).forEach(([slotIndex, classEntry]) => {
-      if (
-        classEntry &&
-        classEntry.subject &&
-        classEntry.subject.toLowerCase().includes('library')
-      ) {
-        if (!courseLibrary[dayName]) {
-          courseLibrary[dayName] = {};
-        }
+      Object.entries(courseData).forEach(([dayName, dayData]) => {
+        Object.entries(dayData).forEach(([slotIndex, classEntry]) => {
+          if (
+            classEntry &&
+            classEntry.subject &&
+            classEntry.subject.toLowerCase().includes('library')
+          ) {
+            if (!courseLibrary[dayName]) {
+              courseLibrary[dayName] = {};
+            }
 
-        courseLibrary[dayName][slotIndex] = {
-          subject: 'Library'
-        };
+            courseLibrary[dayName][slotIndex] = {
+              subject: 'Library'
+            };
+          }
+        });
+      });
+
+      if (Object.keys(courseLibrary).length > 0) {
+        courseTimetables[courseName] = courseLibrary;
       }
     });
-  });
-
-  if (Object.keys(courseLibrary).length > 0) {
-    courseTimetables[courseName] = courseLibrary;
-  }
-});
 
 
     res.render('faculty/personal-timetable', {
       personalTimetable,
+      scheduledClasses: scheduledData,
       courseTimetables,  
       days,
       slots,

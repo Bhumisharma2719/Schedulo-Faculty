@@ -3,7 +3,16 @@ const router = express.Router();
 
 const Timetable = require('../models/Timetable');
 const TemporarySchedule = require('../models/TemporarySchedule');
+const ScheduleNotification = require('../models/ScheduleNotification');
 const Classroom = require('../models/classroom');
+
+// Helper: Get week start date (Monday)
+function getWeekStartDate(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.setDate(diff));
+}
 
 /**
  * 🔹 GET FREE ROOMS
@@ -31,8 +40,11 @@ router.get('/api/free-rooms', async (req, res) => {
     // 1️⃣ MAIN TIMETABLE CHECK
     Object.values(latest.timetable).forEach(courseData => {
       if (courseData[day] && courseData[day][slot]) {
-        const room = courseData[day][slot].room;
-        if (room) busyRooms.add(room);
+        const roomStr = courseData[day][slot].room;
+        if (roomStr) {
+          // Store as "roomNumber|building" format for unique identification
+          busyRooms.add(roomStr);
+        }
       }
     });
 
@@ -43,16 +55,34 @@ router.get('/api/free-rooms', async (req, res) => {
       'to.date': { $gte: startOfDay, $lte: endOfDay }
     });
 
-    tempSchedules.forEach(s => busyRooms.add(s.room));
+    tempSchedules.forEach(s => {
+      // Store as "roomNumber, building" format
+      busyRooms.add(s.room);
+    });
 
-    // 3️⃣ ALL ROOMS
+    // 3️⃣ ALL ROOMS WITH DETAILS
     const allRooms = await Classroom.find();
+    
+    console.log('Total rooms in database:', allRooms.length);
+    console.log('Busy rooms set (roomNumber, building):', [...busyRooms]);
+    
     const freeRooms = allRooms
-      .map(r => r.roomNumber)
-      .filter(r => !busyRooms.has(r));
+      .filter(r => {
+        // Create the full identifier: "roomNumber, building"
+        const fullIdentifier = `${r.roomNumber}, ${r.building}`;
+        const isBusy = busyRooms.has(fullIdentifier);
+        console.log(`Room ${fullIdentifier}: ${isBusy ? 'BUSY' : 'FREE'}`);
+        return !isBusy;
+      })
+      .map(r => ({
+        roomNumber: r.roomNumber,
+        building: r.building,
+        classOrLab: r.classOrLab,
+        labType: r.labType || ''
+      }));
 
-    console.log('Busy rooms:', [...busyRooms]);
-    console.log('Free rooms:', freeRooms);
+    console.log('Free rooms returned:', freeRooms.length);
+    console.log('Free rooms details:', freeRooms);
 
     res.json({ rooms: freeRooms });
 
@@ -64,16 +94,28 @@ router.get('/api/free-rooms', async (req, res) => {
 
 
 /**
- * 🔹 SAVE TEMPORARY SCHEDULE
- * blocks:
- * - same date + slot
- * - same room clash
+ * 🔹 SAVE TEMPORARY SCHEDULE (RESCHEDULE CLASS)
+ * - Moves class from original slot to new slot on specific date
+ * - Freezes date for other teachers
+ * - Creates notification
  */
 router.post('/api/save-temporary-schedule', async (req, res) => {
   try {
     const data = req.body;
+    console.log('📌 Saving temporary schedule:', JSON.stringify(data, null, 2));
 
-    // 🔹 normalize slot & date
+    if (!data.teacherId || !data.course || !data.from || !data.to || !data.room || !data.building) {
+      console.error('❌ Missing required fields:', { 
+        teacherId: !!data.teacherId, 
+        course: !!data.course, 
+        from: !!data.from, 
+        to: !!data.to, 
+        room: !!data.room,
+        building: !!data.building
+      });
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
     const slot = Number(data.to.slot);
 
     const dateObj = new Date(data.to.date);
@@ -83,47 +125,149 @@ router.post('/api/save-temporary-schedule', async (req, res) => {
     const endOfDay = new Date(dateObj);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // ❌ SLOT ALREADY USED?
+    // ❌ CHECK: SLOT ALREADY USED BY ANOTHER TEACHER?
     const slotClash = await TemporarySchedule.findOne({
       'to.day': data.to.day,
       'to.slot': slot,
-      'to.date': { $gte: startOfDay, $lte: endOfDay }
+      'to.date': { $gte: startOfDay, $lte: endOfDay },
+      teacherId: { $ne: data.teacherId },
+      status: 'scheduled'
     });
 
     if (slotClash) {
+      const Teacher = require('../models/Teacher');
+      const teacher = await Teacher.findById(slotClash.teacherId);
+      console.warn('⚠️ Slot clash detected:', slotClash);
       return res.status(409).json({
-        error: 'This slot is already scheduled for selected date'
+        error: `❌ This slot is already scheduled by ${teacher?.name || 'another teacher'}. This slot is frozen.`
       });
     }
 
-    // ❌ ROOM ALREADY USED?
+    // ❌ CHECK: ROOM ALREADY USED?
     const roomClash = await TemporarySchedule.findOne({
       room: data.room,
       'to.day': data.to.day,
       'to.slot': slot,
-      'to.date': { $gte: startOfDay, $lte: endOfDay }
+      'to.date': { $gte: startOfDay, $lte: endOfDay },
+      status: 'scheduled'
     });
 
     if (roomClash) {
+      console.warn('⚠️ Room clash detected:', roomClash);
       return res.status(409).json({
-        error: 'This room is already booked for selected date'
+        error: `This room is already booked on ${data.to.date} at this slot`
       });
     }
 
+    // Get week start date
+    const weekStart = getWeekStartDate(dateObj);
+    console.log('📅 Week start date:', weekStart);
+
     // ✅ SAVE TEMPORARY SCHEDULE
-    await TemporarySchedule.create({
-      ...data,
+    const tempSchedule = await TemporarySchedule.create({
+      course: data.course,
+      subject: data.subject || '',
+      teacherId: data.teacherId,
+      from: data.from,
       to: {
-        ...data.to,
-        slot
-      }
+        day: data.to.day,
+        slot,
+        date: dateObj
+      },
+      room: data.room,
+      building: data.building,
+      weekStartDate: weekStart,
+      status: 'scheduled'
     });
 
-    res.json({ success: true });
+    console.log('✅ Temporary schedule saved:', tempSchedule._id);
+
+    // ✅ CREATE NOTIFICATION
+    const notification = await ScheduleNotification.create({
+      course: data.course,
+      subject: data.subject || '',
+      teacherId: data.teacherId,
+      fromSlot: data.from,
+      toSlot: {
+        day: data.to.day,
+        slot,
+        date: dateObj
+      },
+      room: data.room,
+      building: data.building,
+      scheduledDate: dateObj
+    });
+
+    console.log('✅ Notification created:', notification._id);
+
+    res.json({ 
+      success: true, 
+      message: 'Class scheduled successfully!',
+      schedule: tempSchedule 
+    });
 
   } catch (err) {
-    console.error('Save schedule error:', err);
-    res.status(500).json({ error: 'Failed to save schedule' });
+    console.error('❌ Error saving schedule:', err.message);
+    console.error('Stack:', err.stack);
+    res.status(500).json({ error: 'Failed to save schedule: ' + err.message });
+  }
+});
+
+// 🔹 GET ALL SCHEDULED NOTIFICATIONS FOR USER
+router.get('/api/scheduled-notifications', async (req, res) => {
+  try {
+    const notifications = await ScheduleNotification.find()
+      .populate('teacherId', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.json({ notifications });
+  } catch (err) {
+    console.error('Error fetching notifications:', err);
+    res.status(500).json({ notifications: [] });
+  }
+});
+
+// 🔹 GET TEMPORARY SCHEDULES FOR SPECIFIC WEEK (STUDENT VIEW)
+router.get('/api/week-schedules', async (req, res) => {
+  try {
+    const { weekStartDate } = req.query;
+    const weekStart = new Date(weekStartDate);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const schedules = await TemporarySchedule.find({
+      weekStartDate: weekStart,
+      status: 'scheduled',
+      'to.date': { $gte: weekStart, $lte: weekEnd }
+    });
+
+    res.json({ schedules });
+  } catch (err) {
+    console.error('Error fetching week schedules:', err);
+    res.status(500).json({ schedules: [] });
+  }
+});
+
+// 🔹 GET SCHEDULED CLASSES FOR TODAY
+router.get('/api/today-schedules', async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todaySchedules = await TemporarySchedule.find({
+      'to.date': { $gte: today, $lt: tomorrow },
+      status: 'scheduled'
+    });
+
+    res.json({ schedules: todaySchedules });
+  } catch (err) {
+    console.error('Error fetching today schedules:', err);
+    res.status(500).json({ schedules: [] });
   }
 });
 
