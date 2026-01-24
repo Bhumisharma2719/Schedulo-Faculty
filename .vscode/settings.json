@@ -1,0 +1,20 @@
+{
+  "[html]": {
+    "editor.defaultFormatter": "vscode.html-language-features",
+    "editor.formatOnSave": false
+  },
+  "[ejs]": {
+    "editor.defaultFormatter": "vscode.html-language-features"
+  },
+  "html.validate.scripts": false,
+  "html.validate.styles": false,
+  "html.validate.html": false,
+  "[plaintext]": {},
+  "files.associations": {
+    "*.ejs": "html"
+  },
+  "css.lint.validProperties": [
+    "composes"
+  ],
+  "problems.decorations.enabled": false
+}
