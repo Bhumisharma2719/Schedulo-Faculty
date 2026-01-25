@@ -22,6 +22,9 @@ const step3Routes = require('./routes/step3');
 const step4Routes = require('./routes/step4');
 const step5Routes = require('./routes/step5');
 const step6Routes = require('./routes/step6');
+
+// 📅 Import TemporarySchedule for archiving
+const TemporarySchedule = require('./models/TemporarySchedule');
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -61,6 +64,38 @@ mongoose.connect(process.env.DB_URI, {
 .then(() => console.log("DB connected"))
 .catch((err) => console.error("MongoDB connection error:", err));
 
+// 📅 AUTO-ARCHIVE SCHEDULED CLASSES
+// Archive schedules whose date has passed
+async function archiveExpiredSchedules() {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+
+    // Find all 'scheduled' classes with date in the past
+    const result = await TemporarySchedule.updateMany(
+      {
+        status: 'scheduled',
+        'to.date': { $lt: today } // Date is before today
+      },
+      {
+        $set: { status: 'archived' }
+      }
+    );
+
+    if (result.modifiedCount > 0) {
+      console.log(`✅ Archived ${result.modifiedCount} expired schedules`);
+    }
+  } catch (err) {
+    console.error('❌ Error archiving schedules:', err);
+  }
+}
+
+// Run archiving every hour
+setInterval(archiveExpiredSchedules, 60 * 60 * 1000); // Every 60 minutes
+
+// Also run on app startup
+archiveExpiredSchedules();
+
 // Make departmentName available in all views
 app.use((req, res, next) => {
   res.locals.departmentName = req.session.departmentName || '';
@@ -81,6 +116,9 @@ app.use('/faculty', isLoggedIn, facultyRoutes);
 
 const scheduleRoutes = require('./routes/schedule');
 app.use('/schedule', scheduleRoutes);
+
+const adminSchedulesRoutes = require('./routes/admin-schedules');
+app.use('/admin/schedules', isLoggedIn, checkAdmin, adminSchedulesRoutes);
 
 // Protected Step routes (only logged in & admin users)
 app.use('/step1', isLoggedIn, checkAdmin, step1Routes);

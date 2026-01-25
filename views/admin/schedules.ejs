@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schedule Management - Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background-color: #f7f7f7;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .status-scheduled {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .status-archived {
+      background: #e2e3e5;
+      color: #383d41;
+    }
+
+    .schedule-card {
+      background: white;
+      border-left: 4px solid #0F044C;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      transition: all 0.2s ease;
+    }
+
+    .schedule-card:hover {
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    }
+
+    .schedule-card.archived {
+      opacity: 0.8;
+      background: #f9f9f9;
+      border-left-color: #999;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      margin-top: 30px;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #0F044C;
+    }
+
+    .section-header h2 {
+      margin: 0;
+      color: #0F044C;
+      font-size: 1.5rem;
+      font-weight: bold;
+    }
+
+    .badge-count {
+      background: #0F044C;
+      color: white;
+      padding: 5px 15px;
+      border-radius: 20px;
+      margin-left: 15px;
+      font-weight: bold;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      border-top: 4px solid #0F044C;
+    }
+
+    .stat-number {
+      font-size: 28px;
+      font-weight: bold;
+      color: #0F044C;
+    }
+
+    .stat-label {
+      color: #666;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+
+    .filter-section {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .no-data {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+      font-size: 16px;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-top: 10px;
+    }
+
+    .info-item {
+      background: #f0f0f0;
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 13px;
+    }
+
+    .info-label {
+      font-weight: bold;
+      color: #0F044C;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+
+<!-- Header -->
+<header class="bg-[#0F044C] shadow-md py-4 px-6">
+  <div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between">
+      <h1 class="text-white text-2xl font-bold">📅 Schedule Management</h1>
+      <a href="/step1" class="bg-white text-[#0F044C] px-4 py-2 rounded hover:bg-gray-200 transition">
+        Back to Admin
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- Main Content -->
+<div class="max-w-7xl mx-auto px-6 py-8">
+
+  <!-- Statistics -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-number"><%= totalScheduled %></div>
+      <div class="stat-label">Active Schedules</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number"><%= totalArchived %></div>
+      <div class="stat-label">Archived Schedules</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number"><%= totalScheduled + totalArchived %></div>
+      <div class="stat-label">Total Schedules</div>
+    </div>
+  </div>
+
+  <!-- Filter Section -->
+  <div class="filter-section">
+    <h3 class="text-lg font-bold text-[#0F044C] mb-4">🔍 Filter Schedules</h3>
+    <form method="GET" action="/admin/schedules" class="flex gap-4 items-end">
+      <div class="flex-1">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Teacher Name</label>
+        <select name="teacher" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0F044C]">
+          <option value="">-- All Teachers --</option>
+          <% allTeachers.forEach(teacher => { %>
+            <option value="<%= teacher._id %>" <%= filterTeacher === teacher._id.toString() ? 'selected' : '' %>>
+              <%= teacher.name %> (<%= teacher.email %>)
+            </option>
+          <% }); %>
+        </select>
+      </div>
+      <button type="submit" class="bg-[#0F044C] text-white px-6 py-2 rounded hover:bg-[#1a0560] transition">
+        Filter
+      </button>
+      <% if (filterTeacher) { %>
+        <a href="/admin/schedules" class="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600 transition">
+          Clear Filter
+        </a>
+      <% } %>
+    </form>
+  </div>
+
+  <!-- Active Schedules Section -->
+  <div class="section-header">
+    <h2>✅ Active Schedules</h2>
+    <span class="badge-count"><%= totalScheduled %></span>
+  </div>
+
+  <% if (scheduledClasses.length === 0) { %>
+    <div class="no-data">
+      📭 No active schedules found
+    </div>
+  <% } else { %>
+    <% scheduledClasses.forEach(schedule => { %>
+      <div class="schedule-card">
+        <div class="flex justify-between items-start mb-3">
+          <div>
+            <h4 class="font-bold text-[#0F044C] text-lg">
+              <%= schedule.course %> - <%= schedule.subject || 'N/A' %>
+            </h4>
+            <p class="text-sm text-gray-600 mt-1">
+              👨‍🏫 <strong><%= schedule.teacher %></strong> 
+              <% if (schedule.teacherEmail) { %>
+                (<a href="mailto:<%= schedule.teacherEmail %>" class="text-blue-600 underline"><%= schedule.teacherEmail %></a>)
+              <% } %>
+            </p>
+          </div>
+          <span class="status-badge status-scheduled">SCHEDULED</span>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Original:</span> <%= schedule.from.day %> - Slot <%= schedule.from.slot + 1 %>
+          </div>
+          <div class="info-item">
+            <span class="info-label">New:</span> <%= schedule.to.day %> - Slot <%= schedule.to.slot + 1 %>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Location:</span> <%= schedule.room %>, <%= schedule.building %>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Date:</span>
+            <% 
+              const date = new Date(schedule.scheduledDate);
+              const day = String(date.getDate()).padStart(2, '0');
+              const month = String(date.getMonth() + 1).padStart(2, '0');
+              const year = date.getFullYear();
+            %>
+            <%= day %>-<%= month %>-<%= year %>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Scheduled On:</span>
+            <%
+              const created = new Date(schedule.createdAt);
+              const createdTime = created.toLocaleString();
+            %>
+            <%= createdTime %>
+          </div>
+          <div class="info-item">
+            <span class="info-label">ID:</span> <%= schedule._id.toString().substring(0, 12) %>...
+          </div>
+        </div>
+      </div>
+    <% }); %>
+  <% } %>
+
+  <!-- Archived Schedules Section -->
+  <div class="section-header">
+    <h2>📦 Archived Schedules</h2>
+    <span class="badge-count"><%= totalArchived %></span>
+  </div>
+
+  <% if (archivedClasses.length === 0) { %>
+    <div class="no-data">
+      📭 No archived schedules found
+    </div>
+  <% } else { %>
+    <% archivedClasses.forEach(schedule => { %>
+      <div class="schedule-card archived">
+        <div class="flex justify-between items-start mb-3">
+          <div>
+            <h4 class="font-bold text-gray-700 text-lg">
+              <%= schedule.course %> - <%= schedule.subject || 'N/A' %>
+            </h4>
+            <p class="text-sm text-gray-600 mt-1">
+              👨‍🏫 <strong><%= schedule.teacher %></strong>
+              <% if (schedule.teacherEmail) { %>
+                (<a href="mailto:<%= schedule.teacherEmail %>" class="text-blue-600 underline"><%= schedule.teacherEmail %></a>)
+              <% } %>
+            </p>
+          </div>
+          <span class="status-badge status-archived">ARCHIVED</span>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Original:</span> <%= schedule.from.day %> - Slot <%= schedule.from.slot + 1 %>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Moved To:</span> <%= schedule.to.day %> - Slot <%= schedule.to.slot + 1 %>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Location:</span> <%= schedule.room %>, <%= schedule.building %>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Date Was:</span>
+            <% 
+              const archDate = new Date(schedule.scheduledDate);
+              const archDay = String(archDate.getDate()).padStart(2, '0');
+              const archMonth = String(archDate.getMonth() + 1).padStart(2, '0');
+              const archYear = archDate.getFullYear();
+            %>
+            <%= archDay %>-<%= archMonth %>-<%= archYear %>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Scheduled On:</span>
+            <%
+              const archCreated = new Date(schedule.createdAt);
+              const archCreatedTime = archCreated.toLocaleString();
+            %>
+            <%= archCreatedTime %>
+          </div>
+          <div class="info-item">
+            <span class="info-label">ID:</span> <%= schedule._id.toString().substring(0, 12) %>...
+          </div>
+        </div>
+      </div>
+    <% }); %>
+  <% } %>
+
+</div>
+
+<!-- Footer -->
+<footer class="bg-[#0F044C] text-white text-center py-4 mt-20">
+  <p>©2025 Schedulo - Schedule Management System</p>
+</footer>
+
+</body>
+</html>

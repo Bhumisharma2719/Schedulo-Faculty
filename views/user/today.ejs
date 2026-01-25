@@ -32,6 +32,131 @@
     box-shadow: 0 0 10px rgba(0,0,0,0.2);
     transition: top 0.2s ease;
   }
+
+  /* 🔔 Floating Notification Ball */
+  .notification-ball {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+    z-index: 40;
+    transition: all 0.3s ease;
+    animation: float 3s ease-in-out infinite;
+  }
+  
+  .notification-ball:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
+  }
+  
+  .notification-ball span {
+    font-size: 28px;
+  }
+  
+  .notification-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #FFD700;
+    color: #333;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+  }
+  
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+  }
+  
+  /* 📋 Notification Modal */
+  .notification-modal {
+    display: none;
+    position: fixed;
+    z-index: 50;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+  
+  .notification-modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .notification-content {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+  
+  .notification-item {
+    background: #F0F4FF;
+    padding: 15px;
+    margin: 10px 0;
+    border-left: 4px solid #0F044C;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .notification-item:hover {
+    background: #E8EFFF;
+    transform: translateX(5px);
+  }
+
+  /* 📅 Scheduled Classes Section */
+  .scheduled-classes-section {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  }
+  
+  .scheduled-class-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+  }
+  
+  .scheduled-class-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  }
+
+  .badge {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.3);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    margin: 2px 2px;
+  }
 </style>
 
 </head>
@@ -149,6 +274,115 @@
     </main>
   </div> <!-- ✅ End of flex-grow wrapper -->
 
+  <!-- 📅 SCHEDULED CLASSES FOR TODAY -->
+  <% if (temporarySchedules && temporarySchedules.length > 0) { %>
+    <div class="scheduled-classes-section">
+      <h3 class="text-2xl font-bold mb-4 text-[#0F044C]">
+        ✅ Classes Scheduled For Today
+      </h3>
+      
+      <% temporarySchedules.forEach(schedule => { %>
+        <div class="scheduled-class-card">
+          <div class="mb-2">
+            <h4 class="font-bold text-lg"><%= schedule.course %> - <%= schedule.subject || 'N/A' %></h4>
+          </div>
+          <p>
+            <strong>Teacher:</strong> <%= schedule.teacher %>
+            <% if (schedule.teacherEmail) { %>
+              (<%= schedule.teacherEmail %>)
+            <% } %>
+          </p>
+          <p>
+            <strong>Time Slot:</strong> 
+            <span class="badge"><%= schedule.to.day %> - <%= schedule.toTime %></span>
+          </p>
+          <p>
+            <strong>Room:</strong> 
+            <span class="badge"><%= schedule.room %>, <%= schedule.building %></span>
+          </p>
+          <p class="mt-2 text-sm opacity-90">
+            <strong>Originally scheduled for:</strong> <%= schedule.from.day %> - <%= schedule.fromTime %>
+          </p>
+        </div>
+      <% }); %>
+    </div>
+  <% } %>
+
+  <!-- 🔔 FLOATING NOTIFICATION BALL -->
+  <% if (notifications && notifications.length > 0) { %>
+    <div class="notification-ball" onclick="openNotifications()">
+      <span>📬</span>
+      <div class="notification-badge"><%= notifications.length %></div>
+    </div>
+  <% } %>
+
+  <!-- 📋 NOTIFICATION MODAL -->
+  <div id="notificationModal" class="notification-modal">
+    <div class="notification-content">
+      <div class="flex items-center justify-between mb-6">
+        <h3 class="text-2xl font-bold text-[#0F044C]">📬 Schedule Notifications</h3>
+        <button onclick="closeNotifications()" class="text-2xl cursor-pointer">✕</button>
+      </div>
+
+      <!-- Filter by Course -->
+      <div class="mb-6">
+        <label class="block text-sm font-medium mb-2">Filter by Course:</label>
+        <select id="courseFilter" class="w-full px-3 py-2 border border-gray-300 rounded-md" onchange="filterNotifications()">
+          <option value="">All Courses</option>
+          <% 
+            const uniqueCourses = [...new Set(notifications.map(n => n.course))];
+            uniqueCourses.forEach(course => { 
+          %>
+            <option value="<%= course %>"><%= course %></option>
+          <% }); %>
+        </select>
+      </div>
+
+      <!-- Notifications List -->
+      <div id="notificationsList">
+        <% notifications.forEach((notif, idx) => { %>
+          <div class="notification-item" data-course="<%= notif.course %>">
+            <div class="font-bold text-[#0F044C] mb-2">
+              📌 <%= notif.course %> - <%= notif.subject %>
+            </div>
+            <div class="text-sm space-y-1">
+              <p>
+                <strong>Teacher:</strong> <%= notif.teacher %>
+                <% if (notif.teacherEmail) { %>
+                  (<a href="mailto:<%= notif.teacherEmail %>" class="text-blue-600 underline"><%= notif.teacherEmail %></a>)
+                <% } %>
+              </p>
+              <p>
+                <strong>Original Slot:</strong> <%= notif.fromSlot.day %> - <%= notif.fromTime %>
+              </p>
+              <p>
+                <strong>New Slot:</strong> <%= notif.toSlot.day %> - <%= notif.toTime %>
+                <% 
+                  const notifDate = new Date(notif.toSlot.date);
+                  const d = String(notifDate.getDate()).padStart(2, '0');
+                  const m = String(notifDate.getMonth() + 1).padStart(2, '0');
+                  const y = notifDate.getFullYear();
+                %>
+                (Date: <%= d %>-<%= m %>-<%= y %>)
+              </p>
+              <p>
+                <strong>Room:</strong> <%= notif.room %>, <%= notif.building %>
+              </p>
+              <p class="text-gray-500">
+                <strong>Notified:</strong>
+                <% 
+                  const notifTime = new Date(notif.createdAt);
+                  const time = notifTime.toLocaleString();
+                %>
+                <%= time %>
+              </p>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    </div>
+  </div>
+
   <!-- ✅ Footer stays at bottom -->
   <footer class="bg-[#0F044C] text-white text-center py-4">
      <p>©2025 Schedulo</p>
@@ -181,6 +415,35 @@ document.addEventListener("DOMContentLoaded", function () {
     menuToggle.addEventListener('click', () => {
       mobileMenu.classList.toggle('hidden');
     });
+  }
+});
+
+// 🔔 Notification Functions
+function openNotifications() {
+  document.getElementById('notificationModal').classList.add('active');
+}
+
+function closeNotifications() {
+  document.getElementById('notificationModal').classList.remove('active');
+}
+
+function filterNotifications() {
+  const filter = document.getElementById('courseFilter').value;
+  const items = document.querySelectorAll('.notification-item');
+  
+  items.forEach(item => {
+    if (filter === '' || item.dataset.course === filter) {
+      item.style.display = 'block';
+    } else {
+      item.style.display = 'none';
+    }
+  });
+}
+
+// Close modal when clicking outside
+document.getElementById('notificationModal')?.addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeNotifications();
   }
 });
 </script>

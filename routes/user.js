@@ -3,6 +3,8 @@ const router = express.Router();
 const Timetable = require('../models/Timetable');
 const Subject = require('../models/Subject');
 const Teacher = require('../models/Teacher');
+const TemporarySchedule = require('../models/TemporarySchedule');
+const ScheduleNotification = require('../models/ScheduleNotification');
 
 router.get('/about', (req, res) => {
   res.render('about');
@@ -24,7 +26,15 @@ function getFullDetails(subjectCode, subjectMap) {
   };
 }
 
-// ✅ Full Timetable View (unchanged)
+// Helper: Get week start date (Monday)
+function getWeekStartDate(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.setDate(diff));
+}
+
+// ✅ Full Timetable View (with temporary schedules)
 router.get('/timetable', ensureAuthenticated, async (req, res) => {
   try {
     const selectedCourse = req.query.course || null;
@@ -34,7 +44,9 @@ router.get('/timetable', ensureAuthenticated, async (req, res) => {
       return res.render('user/timetable', {
         timetable: null,
         courses: [],
-        selectedCourse: null
+        selectedCourse: null,
+        temporarySchedules: [],
+        notifications: []
       });
     }
 
@@ -48,6 +60,9 @@ router.get('/timetable', ensureAuthenticated, async (req, res) => {
       slots
     } = latestTimetableDoc;
 
+    // Store slots for later use in mapping
+    const slotsArray = slots || [];
+
     const courses = Object.keys(fullTimetable);
 
     let filteredTimetable = fullTimetable;
@@ -56,6 +71,27 @@ router.get('/timetable', ensureAuthenticated, async (req, res) => {
     if (selectedCourse && fullTimetable[selectedCourse]) {
       filteredTimetable = { [selectedCourse]: fullTimetable[selectedCourse] };
       filteredSubjectTeachers = { [selectedCourse]: subjectTeachers[selectedCourse] || [] };
+    }
+
+    // 🔹 Fetch temporary schedules for this course
+    let temporarySchedules = [];
+    if (selectedCourse) {
+      temporarySchedules = await TemporarySchedule.find({ course: selectedCourse })
+        .populate('teacherId', 'name email')
+        .sort({ 'to.date': 1 });
+    } else {
+      temporarySchedules = await TemporarySchedule.find()
+        .populate('teacherId', 'name email')
+        .sort({ 'to.date': 1 });
+    }
+
+    // 🔹 Fetch all notifications
+    let notifications = await ScheduleNotification.find()
+      .populate('teacherId', 'name email')
+      .sort({ createdAt: -1 });
+
+    if (selectedCourse) {
+      notifications = notifications.filter(n => n.course === selectedCourse);
     }
 
     res.render('user/timetable', {
@@ -68,7 +104,36 @@ router.get('/timetable', ensureAuthenticated, async (req, res) => {
       days,
       courses,
       selectedCourse,
-      userEmail: req.user?.email || ''
+      userEmail: req.user?.email || '',
+      temporarySchedules: temporarySchedules.map(ts => ({
+        _id: ts._id,
+        course: ts.course,
+        subject: ts.subject,
+        teacher: ts.teacherId?.name || 'Unknown Teacher',
+        teacherEmail: ts.teacherId?.email || '',
+        from: ts.from,
+        fromTime: slotsArray[ts.from.slot] || `Slot ${ts.from.slot + 1}`,
+        to: ts.to,
+        toTime: slotsArray[ts.to.slot] || `Slot ${ts.to.slot + 1}`,
+        room: ts.room,
+        building: ts.building,
+        weekStartDate: ts.weekStartDate
+      })),
+      notifications: notifications.map(n => ({
+        _id: n._id,
+        course: n.course,
+        subject: n.subject,
+        teacher: n.teacherId?.name || 'Unknown Teacher',
+        teacherEmail: n.teacherId?.email || '',
+        fromSlot: n.fromSlot,
+        fromTime: slotsArray[n.fromSlot.slot] || `Slot ${n.fromSlot.slot + 1}`,
+        toSlot: n.toSlot,
+        toTime: slotsArray[n.toSlot.slot] || `Slot ${n.toSlot.slot + 1}`,
+        room: n.room,
+        building: n.building,
+        scheduledDate: n.scheduledDate,
+        createdAt: n.createdAt
+      }))
     });
   } catch (err) {
     console.error('Error fetching timetable:', err);
@@ -76,7 +141,7 @@ router.get('/timetable', ensureAuthenticated, async (req, res) => {
   }
 });
 
-// ✅ Today's Timetable View (updated to show full names)
+// ✅ Today's Timetable View (updated with temporary schedules)
 router.get('/timetable/today', ensureAuthenticated, async (req, res) => {
   try {
     const selectedCourse = req.query.course || null;
@@ -95,11 +160,14 @@ router.get('/timetable/today', ensureAuthenticated, async (req, res) => {
         courses: [],
         selectedCourse: null,
         dayName,
-        subjectTeachers: {}
+        subjectTeachers: {},
+        temporarySchedules: [],
+        notifications: []
       });
     }
 
     const { timetable: fullTimetable, slots, days } = latestTimetableDoc;
+    const slotsArray = slots || [];
     const courses = Object.keys(fullTimetable);
     let todaySchedule = [];
 
@@ -159,6 +227,32 @@ router.get('/timetable/today', ensureAuthenticated, async (req, res) => {
       }
     }
 
+    // 🔹 Fetch temporary schedules for today
+    const todayStart = new Date(todayDate);
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayEnd = new Date(todayDate);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    let temporarySchedules = await TemporarySchedule.find({
+      'to.date': { $gte: todayStart, $lte: todayEnd }
+    })
+      .populate('teacherId', 'name email')
+      .sort({ 'to.slot': 1 });
+
+    if (selectedCourse) {
+      temporarySchedules = temporarySchedules.filter(ts => ts.course === selectedCourse);
+    }
+
+    // 🔹 Fetch all notifications
+    let notifications = await ScheduleNotification.find()
+      .populate('teacherId', 'name email')
+      .sort({ createdAt: -1 });
+
+    if (selectedCourse) {
+      notifications = notifications.filter(n => n.course === selectedCourse);
+    }
+
     res.render('user/today', {
       today,
       todaySchedule,
@@ -166,7 +260,35 @@ router.get('/timetable/today', ensureAuthenticated, async (req, res) => {
       courses,
       selectedCourse,
       dayName,
-      subjectTeachers: {}
+      subjectTeachers: {},
+      temporarySchedules: temporarySchedules.map(ts => ({
+        _id: ts._id,
+        course: ts.course,
+        subject: ts.subject,
+        teacher: ts.teacherId?.name || 'Unknown Teacher',
+        teacherEmail: ts.teacherId?.email || '',
+        from: ts.from,
+        fromTime: slotsArray[ts.from.slot] || `Slot ${ts.from.slot + 1}`,
+        to: ts.to,
+        toTime: slotsArray[ts.to.slot] || `Slot ${ts.to.slot + 1}`,
+        room: ts.room,
+        building: ts.building
+      })),
+      notifications: notifications.map(n => ({
+        _id: n._id,
+        course: n.course,
+        subject: n.subject,
+        teacher: n.teacherId?.name || 'Unknown Teacher',
+        teacherEmail: n.teacherId?.email || '',
+        fromSlot: n.fromSlot,
+        fromTime: slotsArray[n.fromSlot.slot] || `Slot ${n.fromSlot.slot + 1}`,
+        toSlot: n.toSlot,
+        toTime: slotsArray[n.toSlot.slot] || `Slot ${n.toSlot.slot + 1}`,
+        room: n.room,
+        building: n.building,
+        scheduledDate: n.scheduledDate,
+        createdAt: n.createdAt
+      }))
     });
 
   } catch (err) {
